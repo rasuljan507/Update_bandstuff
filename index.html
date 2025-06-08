@@ -393,39 +393,38 @@
 </div>
 
   <script>
-    const fixedNumbersForFirstAttempt = [507]; // Например, 17 и 42
-    // fixedNumber и maxAttempts больше не нужны
+    const fixedNumbersForFirstAttempt = [507]; 
 
     window.onload = () => {
-        // Мы не очищаем 'firstGenerationDone' здесь.
-        // Вместо этого, мы устанавливаем флаг 'activatedFixedNumbers'
-        // если страница была обновлена (или если мы уже использовали fixed numbers).
-        
-        // Проверяем, был ли флаг "первая загрузка после обновления" уже установлен.
-        // Если это первый запуск вообще (нет флага), то ничего не делаем.
-        // Если флаг "первая загрузка после обновления" уже есть, значит, это не первый запуск.
+        // Очищаем сохраненные числа при каждой загрузке
+        sessionStorage.removeItem('savedNumbers'); 
 
-        // Мы будем использовать sessionStorage для отслеживания, что "первая загрузка после обновления" уже произошла.
-        // Например, можно использовать флаг 'shouldUseFixedNumbers'
+        // Использование PerformanceNavigationTiming API
+        // Получаем объект навигации.
+        const navigationEntries = performance.getEntriesByType("navigation");
+        let navigationType = "navigate"; // По умолчанию считаем, что это обычный переход
 
-        // При загрузке страницы: если мы только что перезагрузили, то фиксированные числа должны сработать.
-        // Если это просто первое открытие, то не должны.
-        const hasBeenReloaded = sessionStorage.getItem('pageReloaded') === 'true'; // Флаг, который мы установим в generateNumber
-        const usedFixedInThisSession = sessionStorage.getItem('fixedNumbersUsedInSession') === 'true'; // Новый флаг для сессии
+        if (navigationEntries.length > 0) {
+            navigationType = navigationEntries[0].type;
+        }
 
-        if (hasBeenReloaded && !usedFixedInThisSession) {
-            // Если страница была перезагружена И фиксированные числа еще не использовались в этой сессии
-            // Тогда мы отмечаем, что при следующей генерации нужно использовать фиксированные числа.
+        // Если тип навигации - "reload" (перезагрузка страницы)
+        if (navigationType === "reload") {
+            // Устанавливаем флаг, который укажет, что фиксированные числа должны выпасть
             sessionStorage.setItem('triggerFixedForNextGeneration', 'true');
         } else {
-            // Если это не перезагрузка, или фиксированные числа уже использовались,
-            // то не запускаем триггер.
+            // В любом другом случае (обычный переход, назад/вперед),
+            // сбрасываем этот триггер.
             sessionStorage.removeItem('triggerFixedForNextGeneration');
         }
         
-        // Всегда очищаем флаг перезагрузки при загрузке страницы, так как мы его уже обработали.
-        sessionStorage.removeItem('pageReloaded');
-        sessionStorage.removeItem('savedNumbers'); // Очищаем сохраненные числа при каждой загрузке
+        // Также сбрасываем флаг, что фиксированные числа уже использовались в сессии,
+        // если это "reload", чтобы можно было снова вызвать их при следующей перезагрузке.
+        // Если вы хотите, чтобы фиксированные числа выпадали только один раз за ВСЮ сессию (до закрытия браузера),
+        // то эту строку нужно закомментировать.
+        // Если вы хотите, чтобы они выпадали ПРИ КАЖДОЙ ПЕРЕЗАГРУЗКЕ, то оставляем ее.
+        sessionStorage.removeItem('fixedNumbersUsedInSession');
+
 
         const promo = document.getElementById('promo');
         if (promo) {
@@ -448,27 +447,22 @@
     }
 
     function generateRandom(min, max, excludeSet) {
-      // Эта функция генерирует случайные числа, она будет использоваться,
-      // когда фиксированные числа уже выпали или не должны выпадать.
       let num;
       let attempts = 0;
-      const maxGenerateAttempts = (max - min + 1) * 2; // Ограничение попыток, чтобы избежать бесконечного цикла
+      const maxGenerateAttempts = (max - min + 1) * 2; 
 
       do {
         num = Math.floor(Math.random() * (max - min + 1)) + min;
         attempts++;
         if (attempts > maxGenerateAttempts) {
             console.warn("Не удалось найти уникальное число в заданном диапазоне с исключением.");
-            return null; // Возвращаем null или другое значение, чтобы показать ошибку
+            return null; 
         }
       } while (excludeSet && excludeSet.has(num)); 
       return num;
     }
 
     function generateNumber() {
-        // Устанавливаем флаг, что страница была перезагружена. Это будет использоваться при СЛЕДУЮЩЕЙ загрузке.
-        sessionStorage.setItem('pageReloaded', 'true');
-
         const min = parseInt(document.getElementById('minInput').value) || 1;
         const max = parseInt(document.getElementById('maxInput').value) || 100;
         const exclude = document.getElementById('exclude').checked;
@@ -487,52 +481,89 @@
 
         // Проверяем, нужно ли использовать фиксированные числа для этой генерации
         const shouldUseFixed = sessionStorage.getItem('triggerFixedForNextGeneration') === 'true';
+        const fixedUsedInSession = sessionStorage.getItem('fixedNumbersUsedInSession') === 'true';
 
+        // Если триггер установлен И фиксированные числа еще не использовались в этой сессии
+        if (shouldUseFixed && !fixedUsedInSession) {
+            setTimeout(() => {
+                const numbers = fixedNumbersForFirstAttempt.slice(0, count); 
+                
+                while(numbers.length < count) {
+                    const randomNum = generateRandom(min, max, excludeSet); 
+                    if (randomNum !== null) { 
+                        numbers.push(randomNum);
+                    } else {
+                        alert("Не удалось сгенерировать все числа из-за ограничений исключения.");
+                        break; 
+                    }
+                }
+                sessionStorage.removeItem('triggerFixedForNextGeneration'); // Удаляем триггер после использования
+                setFixedNumbersUsedInSession(); // Отмечаем, что фиксированные числа были использованы в этой сессии
+
+                // Выводим числа
+                const resultEl = document.getElementById('result');
+                resultEl.innerHTML = '';
+                numbers.forEach((n, i) => {
+                    const span = document.createElement('span');
+                    span.textContent = n;
+                    if (i < numbers.length - 1) {
+                        span.style.marginRight = '2rem'
+                    }
+                    span.className = 'digit';
+                    span.style.animationDelay = `${i * 0.1}s`;
+                    resultEl.appendChild(span);
+                });
+
+                // Логика сохранения
+                const promo = document.getElementById('promo');
+                if (promo) {
+                    promo.innerHTML = `<a href="#" id="saveLink" style="color:red; text-decoration: underline;">сохранить это число</a>`;
+
+                    const oldLink = document.getElementById('saveLink');
+                    if (oldLink) {
+                        oldLink.replaceWith(oldLink.cloneNode(true));
+                    }
+
+                    document.getElementById('saveLink').onclick = (e) => {
+                        e.preventDefault();
+                        const saved = document.getElementById('result').textContent.trim();
+                        let prev = JSON.parse(sessionStorage.getItem('savedNumbers') || '[]');
+                        prev.push(saved);
+                        if (prev.length > 2) prev = prev.slice(-2);
+                        sessionStorage.setItem('savedNumbers', JSON.stringify(prev));
+                        document.getElementById('savedValue').textContent = prev.join(' | ');
+                        document.getElementById('savedBlock').style.display = 'block';
+                    };
+                }
+
+            }, 1000); 
+            return; 
+        }
+
+        // --- Обычная логика генерации случайных чисел ---
         setTimeout(() => {
             let numbers = [];
 
-            if (shouldUseFixed) {
-                // Если нужно использовать фиксированные числа
-                numbers = fixedNumbersForFirstAttempt.slice(0, count); 
-                
-                // Если запрошено больше чисел, чем есть в fixedNumbersForFirstAttempt,
-                // дополняем их случайными.
-                while(numbers.length < count) {
-                    const randomNum = generateRandom(min, max, excludeSet); // Передаем excludeSet
-                    if (randomNum !== null) { // Проверяем на случай, если generateRandom не смог найти число
-                        numbers.push(randomNum);
-                    } else {
-                        // Если generateRandom вернул null, значит, диапазон слишком маленький.
-                        alert("Не удалось сгенерировать все числа из-за ограничений исключения.");
-                        break; // Выходим из цикла
-                    }
-                }
-                sessionStorage.removeItem('triggerFixedForNextGeneration'); // Удаляем триггер
-                setFixedNumbersUsedInSession(); // Отмечаем, что фиксированные числа были использованы в этой сессии
-            } else {
-                // Обычная логика генерации случайных чисел
-                if (exclude && (max - min + 1 - excludeSet.size < count)) {
-                    alert("Диапазон слишком маленький для исключения повторов или слишком много чисел исключено.");
-                    return;
-                }
+            if (exclude && (max - min + 1 - excludeSet.size < count)) {
+                alert("Диапазон слишком маленький для исключения повторов или слишком много чисел исключено.");
+                return;
+            }
 
-                const used = new Set(); 
+            const used = new Set(); 
 
-                while (numbers.length < count) {
-                    const num = generateRandom(min, max, excludeSet); // Используем новую generateRandom
-                    if (num !== null) {
-                         if (!used.has(num)) { // Убеждаемся, что нет повторов в текущей серии
-                            used.add(num);
-                            numbers.push(num);
-                        }
-                    } else {
-                        alert("Не удалось сгенерировать все числа из-за ограничений исключения.");
-                        break;
+            while (numbers.length < count) {
+                const num = generateRandom(min, max, excludeSet); 
+                if (num !== null) {
+                     if (!used.has(num)) { 
+                        used.add(num);
+                        numbers.push(num);
                     }
+                } else {
+                    alert("Не удалось сгенерировать все числа из-за ограничений исключения.");
+                    break;
                 }
             }
 
-            // Выводим числа
             const resultEl = document.getElementById('result');
             resultEl.innerHTML = '';
             numbers.forEach((n, i) => {
@@ -546,16 +577,14 @@
                 resultEl.appendChild(span);
             });
 
-            // Логика сохранения (остается без изменений)
+            // Логика сохранения
             const promo = document.getElementById('promo');
             if (promo) {
                 promo.innerHTML = `<a href="#" id="saveLink" style="color:red; text-decoration: underline;">сохранить это число</a>`;
-
                 const oldLink = document.getElementById('saveLink');
                 if (oldLink) {
                     oldLink.replaceWith(oldLink.cloneNode(true));
                 }
-
                 document.getElementById('saveLink').onclick = (e) => {
                     e.preventDefault();
                     const saved = document.getElementById('result').textContent.trim();
@@ -571,9 +600,6 @@
         }, 1000); 
     }
     
-    // animateDigits теперь не используется в generateNumber
-    // function animateDigits(number) { ... }
-
     const recordBtn = document.getElementById('recordBtn');
     const stopBtn = document.getElementById('stopRecordBtn');
 
