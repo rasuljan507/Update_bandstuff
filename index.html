@@ -393,7 +393,7 @@
 </div>
 
   <script>
-    const fixedNumbersForFirstAttempt = [507, 14]; 
+    const fixedNumbersForFirstAttempt = [507, 14, 18]; 
 
     window.onload = () => {
         sessionStorage.removeItem('savedNumbers'); 
@@ -405,24 +405,19 @@
             navigationType = navigationEntries[0].type;
         }
 
-        // Проверяем, были ли фиксированные числа уже когда-либо вызваны в этой сессии браузера
-        const hasFixedNumbersBeenTriggeredEver = sessionStorage.getItem('fixedNumbersTriggeredEver') === 'true';
+        const hasFixedNumbersBeenTriggeredEver = sessionStorage.getItem('fixedNumbersTriggeredEver') === 'true'; 
 
-        // Если это перезагрузка И фиксированные числа еще не выпадали в этой сессии
-        if (navigationType === "reload" && !hasFixedNumbersBeenTriggeredEver) {
-            sessionStorage.setItem('triggerFixedForNextGeneration', 'true');
+        if (navigationType === "reload" && !hasFixedNumbersBeenTriggeredEver) { 
+            sessionStorage.setItem('triggerFixedForNextGeneration', 'true'); 
+            sessionStorage.setItem('fixedNumbersNextIndex', '0'); // Инициализируем индекс для фиксированных чисел
         } else {
-            // В любом другом случае (обычный переход, назад/вперед, или фиксированные числа уже выпадали)
-            sessionStorage.removeItem('triggerFixedForNextGeneration');
+            sessionStorage.removeItem('triggerFixedForNextGeneration'); 
+            sessionStorage.removeItem('fixedNumbersNextIndex'); // Очищаем, если не нужно выдавать фиксированные
         }
-        
-        // Флаг `fixedNumbersUsedInSession` больше не нужен, его логика заменяется `fixedNumbersTriggeredEver`.
-        // sessionStorage.removeItem('fixedNumbersUsedInSession'); // УДАЛИТЬ ЭТУ СТРОКУ
     };
 
-    // Эта функция будет вызываться, когда фиксированные числа ВПЕРВЫЕ выпадут в сессии.
-    function setFixedNumbersTriggeredEver() {
-        sessionStorage.setItem('fixedNumbersTriggeredEver', 'true');
+    function setFixedNumbersTriggeredEver() { 
+        sessionStorage.setItem('fixedNumbersTriggeredEver', 'true'); 
     }
 
     function generateRandom(min, max, excludeSet) {
@@ -458,34 +453,46 @@
           );
         }
 
-        // Проверяем, нужно ли использовать фиксированные числа для этой генерации
-        const shouldUseFixed = sessionStorage.getItem('triggerFixedForNextGeneration') === 'true';
-        // Теперь `fixedUsedInSession` больше не нужен здесь
-        // const fixedUsedInSession = sessionStorage.getItem('fixedNumbersUsedInSession') === 'true';
+        const shouldUseFixed = sessionStorage.getItem('triggerFixedForNextGeneration') === 'true'; 
+        const fixedNumbersNextIndex = parseInt(sessionStorage.getItem('fixedNumbersNextIndex') || '0', 10); 
 
-        // Если триггер установлен
-        if (shouldUseFixed) {
+        // Если триггер установлен И есть еще фиксированные числа для выдачи
+        if (shouldUseFixed && fixedNumbersNextIndex < fixedNumbersForFirstAttempt.length) { 
             setTimeout(() => {
-                const numbers = fixedNumbersForFirstAttempt.slice(0, count); 
-                
-                while(numbers.length < count) {
-                    const randomNum = generateRandom(min, max, excludeSet); 
-                    if (randomNum !== null) { 
-                        numbers.push(randomNum);
+                let numbersToDisplay = [];
+
+                // Добавляем следующее фиксированное число
+                numbersToDisplay.push(fixedNumbersForFirstAttempt[fixedNumbersNextIndex]);
+
+                // Если count > 1, заполняем оставшиеся места случайными числами
+                for (let i = 1; i < count; i++) {
+                    const randomNum = generateRandom(min, max, excludeSet);
+                    if (randomNum !== null) {
+                        numbersToDisplay.push(randomNum);
                     } else {
                         alert("Не удалось сгенерировать все числа из-за ограничений исключения.");
                         break; 
                     }
                 }
-                sessionStorage.removeItem('triggerFixedForNextGeneration'); // Удаляем триггер после использования
-                setFixedNumbersTriggeredEver(); // Устанавливаем флаг, что фиксированные числа были использованы
 
+                // Обновляем индекс для следующего фиксированного числа
+                const newFixedNumbersNextIndex = fixedNumbersNextIndex + 1;
+                if (newFixedNumbersNextIndex < fixedNumbersForFirstAttempt.length) {
+                    sessionStorage.setItem('fixedNumbersNextIndex', newFixedNumbersNextIndex.toString());
+                } else {
+                    // Все фиксированные числа выданы
+                    sessionStorage.removeItem('triggerFixedForNextGeneration'); // Удаляем триггер
+                    sessionStorage.removeItem('fixedNumbersNextIndex'); // Очищаем индекс
+                    setFixedNumbersTriggeredEver(); // Устанавливаем флаг, что фиксированные числа были выданы (и больше не должны выпадать)
+                }
+
+                // Выводим числа
                 const resultEl = document.getElementById('result');
                 resultEl.innerHTML = '';
-                numbers.forEach((n, i) => {
+                numbersToDisplay.forEach((n, i) => {
                     const span = document.createElement('span');
                     span.textContent = n;
-                    if (i < numbers.length - 1) {
+                    if (i < numbersToDisplay.length - 1) {
                         span.style.marginRight = '2rem'
                     }
                     span.className = 'digit';
@@ -493,6 +500,7 @@
                     resultEl.appendChild(span);
                 });
 
+                // Логика сохранения (остается прежней)
                 const promo = document.getElementById('promo');
                 if (promo) {
                     promo.innerHTML = `<a href="#" id="saveLink" style="color:red; text-decoration: underline;">сохранить это число</a>`;
@@ -518,6 +526,7 @@
             return; 
         }
 
+        // --- Обычная логика генерации случайных чисел (если фиксированные числа не используются или уже выданы) ---
         setTimeout(() => {
             let numbers = [];
 
